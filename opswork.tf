@@ -4,55 +4,62 @@ provider "aws" {
   region = "${var.aws_region}"
 }
 
-resource "aws_vpc" "default" {
-  cidr_block = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-  instance_tenancy     = "default"
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-  assign_generated_ipv6_cidr_block    = "false"
-  enable_classiclink   = "false"
-  tags {
-    Name = "TAG_TAG_TAG"
-  }
-}
-
 #Create ec2 instance in existing VPC
 resource "aws_instance" "web" {
+  count = 1
   instance_type = "t2.micro"
-  availability_zone = "${var.aws_region}"
-  key_name        = "user"
-  ami = "ami-00035f41c82244dab"
-  security_groups = [ "${aws_security_group.FrontEnd.id}" ]
+  availability_zone = "eu-west-1c"
+  ami = "ami-a8d2d7ce"
+  vpc_security_group_ids = [ "${aws_security_group.OEvgeniy_group.id}" ]
   source_dest_check = "false"
-  user_data = "${file("install.sh")}"
+
+  #Create new EBS volume with "magnetic" type, 1GB size
+  ebs_block_device {
+    device_name           = "/dev/sda2"
+    volume_type           = "standard"
+    volume_size           = 1
+    delete_on_termination = false
+  }
+  user_data = "${file("./attach_ebs.sh")}" 
+  key_name = "key_Evgenij"
+  provisioner "file" {
+        source      = "./install.sh"
+        destination = "/tmp/install.sh"
+
+        connection {
+            type     = "ssh"
+            user     = "ubuntu"
+            private_key = "${file("./ssh/key_oEvgen.pem")}"
+        }
+    }
+
+    provisioner "remote-exec" {
+        inline = [
+             "chmod +x /tmp/install.sh",
+             "/tmp/install.sh"
+        ]
+        connection {
+            type     = "ssh"
+            user     = "ubuntu"
+            private_key = "${file("./ssh/key_oEvgen.pem")}"
+        }
+    }
+    
+
   tags {
-    Name = "TAG_TAG_TAG"
+    Name = "TAGS_TAGS"
   }
 }
 
-#Create new EBS volume with "magnetic" type, 1GB size
-resource "aws_ebs_volume" "ebs-volume-1" {
-    availability_zone = "eu-west-1c"
-    type = "standard"
-    size = 1
-    tags {
-      Name = "TAG_TAG_TAG"
-    }
+output "node_dns_name" {
+    value = "${aws_instance.web.public_dns}"
 }
 
-#mount additional volume
-resource "aws_volume_attachment" "ebs-volume-1-attachment" {
-  device_name = "/dev/sda2"
-   volume_id = "${aws_ebs_volume.ebs-volume-1.id}"
-  instance_id = "${aws_instance.web.id}"
-}
 
 #Create security group which allows only 22 and 80 inbound ports and attach it to the instance.
-resource "aws_security_group" "FrontEnd" {
-  name = "TAG_TAG_TAG_group"
-  description =  "Security group created by TAG_TAG_TAG for ingress ports 22,80"
+resource "aws_security_group" "OEvgeniy_group" {
+  name = "OEvgeniy_group"
+  description =  "ingress ports 22,80"
 
   ingress {
       from_port   = 22
@@ -60,7 +67,7 @@ resource "aws_security_group" "FrontEnd" {
       protocol    = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }
-
+    
     ingress {
       from_port   = 80
       to_port     = 80
@@ -68,11 +75,22 @@ resource "aws_security_group" "FrontEnd" {
       cidr_blocks = ["0.0.0.0/0"]
     }
 
+    # Open up outbound internet access
+    egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+ tags {
+      Name = "TAGS_TAGS"
+    }
 }
 
-resource "aws_key_pair" "user" {
-    key_name = "key_TAG_TAG_TAG"
-    public_key = "${file("ssh/user.pub")}"
+resource "aws_key_pair" "key_Evgenij" {
+    key_name = "key_Evgenij"
+    public_key = "${file("./ssh/key.pem")}"
 }
 
 variable "aws_region" {
